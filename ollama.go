@@ -13,6 +13,7 @@ import (
 const (
 	defaultOllamaURL = "http://localhost:11434"
 	defaultModel     = "qwen3:8b"
+	coderModel       = "qwen2:7b"
 )
 
 type OllamaRequest struct {
@@ -51,7 +52,7 @@ func ask(ctx context.Context, client *http.Client, baseURL, instruction string) 
 
 func chat(ctx context.Context, client *http.Client, baseURL string, messages []Message, tools []ToolDefinition) (Message, error) {
 	payload := OllamaRequest{
-		Model:    defaultModel,
+		Model:    coderModel,
 		Messages: messages,
 		Tools:    tools,
 		Stream:   false,

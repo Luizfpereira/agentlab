@@ -259,6 +259,65 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+func TestAgent_ToolFailureReturnedToModel(t *testing.T) {
+	t.Parallel()
+
+	const finalReply = "I could not use the tool"
+	const toolErr = "tool execution failed"
+	var calls int
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req OllamaRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		calls++
+		switch calls {
+		case 1:
+			_ = json.NewEncoder(w).Encode(OllamaResponse{
+				Message: Message{
+					Role: "assistant",
+					ToolCalls: []ToolCall{{
+						Function: FunctionCall{
+							Name:      "fail",
+							Arguments: json.RawMessage(`{}`),
+						},
+					}},
+				},
+			})
+		case 2:
+			if !hasAssistantToolCall(req.Messages, "fail") {
+				t.Errorf("second request missing assistant tool call, messages=%+v", req.Messages)
+			}
+			if !hasToolResultContaining(req.Messages, toolErr) {
+				t.Errorf("second request missing tool error %q, messages=%+v", toolErr, req.Messages)
+			}
+			_ = json.NewEncoder(w).Encode(OllamaResponse{
+				Message: Message{Role: "assistant", Content: finalReply},
+			})
+		default:
+			t.Errorf("unexpected extra request #%d", calls)
+			http.Error(w, "too many requests", http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	a := newAgent(srv.Client(), srv.URL, newRegistry(failingTool{err: toolErr}))
+	got, err := a.run(context.Background(), "please fail")
+	if err != nil {
+		t.Fatalf("run() unexpected error: %v", err)
+	}
+	if got != finalReply {
+		t.Fatalf("run() = %q, want %q", got, finalReply)
+	}
+	if calls != 2 {
+		t.Fatalf("ollama calls = %d, want 2", calls)
+	}
+}
+
 func TestAgent_ToolTimeoutIsReturnedToModel(t *testing.T) {
 	t.Parallel()
 

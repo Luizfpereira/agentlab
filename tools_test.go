@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -175,4 +176,21 @@ func (h hangTool) Execute(ctx context.Context, _ json.RawMessage) (string, error
 	case <-timer.C:
 		return "hung", nil
 	}
+}
+
+type failingTool struct {
+	err string
+}
+
+func (failingTool) Name() string { return "fail" }
+
+func (failingTool) Definition() ToolDefinition {
+	return ToolDefinition{
+		Type:     "function",
+		Function: ToolFunctionSchema{Name: "fail", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+}
+
+func (f failingTool) Execute(context.Context, json.RawMessage) (string, error) {
+	return "", errors.New(f.err)
 }
