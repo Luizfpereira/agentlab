@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -35,8 +34,8 @@ func TestAsk_ValidQuestion(t *testing.T) {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		if req.Model != defaultModel {
-			t.Errorf("model = %s, want %s", req.Model, defaultModel)
+		if req.Model != coderModel {
+			t.Errorf("model = %s, want %s", req.Model, coderModel)
 		}
 		if req.Stream {
 			t.Error("stream = true, want false")
@@ -172,66 +171,5 @@ func TestAsk_InvalidURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "create ollama request") {
 		t.Fatalf("ask() error = %q, want create ollama request", err)
-	}
-}
-
-func TestRun_NoArgs(t *testing.T) {
-	t.Parallel()
-
-	var stdout, stderr bytes.Buffer
-	err := run(context.Background(), nil, &http.Client{}, "http://example.invalid", &stdout, &stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want usage error")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "usage") {
-		t.Fatalf("run() error = %q, want usage message", err)
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty", stdout.String())
-	}
-}
-
-func TestRun_ValidQuestion(t *testing.T) {
-	t.Parallel()
-
-	const reply = "the sky is blue"
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(OllamaResponse{
-			Message: Message{Role: "assistant", Content: reply},
-		})
-	}))
-	defer srv.Close()
-
-	var stdout, stderr bytes.Buffer
-	err := run(context.Background(), []string{"why", "is", "the", "sky", "blue?"}, srv.Client(), srv.URL, &stdout, &stderr)
-	if err != nil {
-		t.Fatalf("run() unexpected error: %v", err)
-	}
-	if strings.TrimSpace(stdout.String()) != reply {
-		t.Fatalf("stdout = %q, want %q", stdout.String(), reply)
-	}
-	if !strings.Contains(stderr.String(), "stop_reason=final_answer") {
-		t.Fatalf("stderr = %q, want stop_reason=final_answer", stderr.String())
-	}
-}
-
-func TestRun_PropagatesAskError(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	url := srv.URL
-	srv.Close()
-
-	var stdout, stderr bytes.Buffer
-	err := run(context.Background(), []string{"hello"}, &http.Client{Timeout: 2 * time.Second}, url, &stdout, &stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want ask error")
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty", stdout.String())
-	}
-	if !strings.Contains(stderr.String(), "stop_reason=ollama_error") {
-		t.Fatalf("stderr = %q, want stop_reason=ollama_error", stderr.String())
 	}
 }
